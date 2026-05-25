@@ -1,0 +1,83 @@
+import { indexer, Token, Pool, Bundle } from "envio";
+import { CHAIN_CONFIGS } from "./utils/chains";
+import { findNativePerToken, getNativePriceInUSD } from "./utils/pricing";
+import { updatePoolDayData, updatePoolHourData } from "./utils/intervalUpdates";
+
+indexer.onEvent({ contract: "UniswapV3Pool", event: "Initialize" }, async ({event, context}) => {
+    const poolId = `${event.chainId}-${event.srcAddress.toLowerCase()}`;
+    let pool = await context.Pool.get(poolId);
+    if (!pool) return;
+
+    let [bundle, token0, token1] = await Promise.all([
+        context.Bundle.get(event.chainId.toString()),
+        context.Token.get(pool.token0_id),
+        context.Token.get(pool.token1_id)
+    ]);
+
+    if (!bundle || !token0 || !token1) return;
+
+    const {
+        stablecoinWrappedNativePoolId,
+        stablecoinIsToken0,
+        wrappedNativeAddress,
+        stablecoinAddresses,
+        minimumNativeLocked,
+    } = CHAIN_CONFIGS[event.chainId];
+
+    pool = {
+        ...pool,
+        sqrtPrice: event.params.sqrtPriceX96,
+        tick: event.params.tick
+    };
+
+    context.Pool.set(pool);
+
+    bundle = {
+        ...bundle,
+        ethPriceUSD: await getNativePriceInUSD(
+            context,
+            event.chainId,
+            stablecoinWrappedNativePoolId,
+            stablecoinIsToken0
+        )
+    };
+
+    context.Bundle.set(bundle);
+
+    await Promise.all([
+        updatePoolDayData(event.block.timestamp, pool, context),
+        updatePoolHourData(event.block.timestamp, pool, context),
+    ]);
+
+    const [derivedETH_t0, derivedETH_t1] = await Promise.all([
+        findNativePerToken(
+            context,
+            token0,
+            bundle,
+            wrappedNativeAddress,
+            stablecoinAddresses,
+            minimumNativeLocked,
+        ),
+        findNativePerToken(
+            context,
+            token1,
+            bundle,
+            wrappedNativeAddress,
+            stablecoinAddresses,
+            minimumNativeLocked,
+        )
+    ]);
+
+    token0 = {
+        ...token0,
+        derivedETH: derivedETH_t0
+    };
+
+    token1 = {
+        ...token1,
+        derivedETH: derivedETH_t1
+    };
+
+    context.Token.set(token0);
+    context.Token.set(token1);
+});

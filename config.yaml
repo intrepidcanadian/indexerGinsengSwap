@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: gswap_v3
+rollback_on_reorg: true
+contracts:
+  - name: UniswapV3Factory
+    events:
+      - event: PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)
+  - name: UniswapV3Pool
+    events:
+      - event: Initialize(uint160 sqrtPriceX96, int24 tick)
+      - event: Collect(address indexed owner, address recipient, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount0, uint128 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+      - event: Burn(address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Mint(address sender, address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+
+chains:
+  - id: 1030 # Conflux eSpace
+    start_block: 119639200
+    rpc:
+      url: https://cfx-espace.gateway.tenderly.co/2TURbvW4WvM602DuxdqT4y
+      for: sync
+    contracts:
+      - name: UniswapV3Factory
+        address: 0x62Aa0294cB42Aae39b7772313eAdfa5d489146eC
+      - name: UniswapV3Pool
