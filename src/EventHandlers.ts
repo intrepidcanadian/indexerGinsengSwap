@@ -1,3 +1,4 @@
+// Register all event handlers for the GinsengSwap indexer.
 import './handlers/poolCreated';
 import './handlers/initialize';
 import './handlers/collect';
