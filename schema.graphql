@@ -470,3 +470,39 @@ type TokenHourData {
   # close price USD
   close: BigDecimal!
 }
+
+# ─── Position Manager (tokenId-level) entities ────────────────────────────────
+# Amounts are RAW token units (BigInt): PM events carry no token metadata, and
+# the frontend already knows each position's tokens/decimals from on-chain
+# reads — it formats these itself.
+
+type Position {
+  id: ID! # chainId-tokenId
+  tokenId: BigInt! @index
+  owner: String! @index
+  createdAtTimestamp: BigInt!
+  createdAtBlockNumber: BigInt!
+  liquidity: BigInt!
+  depositedAmount0: BigInt!
+  depositedAmount1: BigInt!
+  withdrawnAmount0: BigInt!
+  withdrawnAmount1: BigInt!
+  collectedAmount0: BigInt!
+  collectedAmount1: BigInt!
+  lastUpdatedTimestamp: BigInt!
+}
+
+type PositionEvent {
+  id: ID! # chainId-txHash-logIndex
+  tokenId: BigInt! @index
+  eventType: String! # MINT | INCREASE | DECREASE | COLLECT | TRANSFER | BURN
+  amount0: BigInt
+  amount1: BigInt
+  liquidity: BigInt
+  fromAddress: String
+  toAddress: String
+  origin: String
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}

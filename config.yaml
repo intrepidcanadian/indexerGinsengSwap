@@ -32,6 +32,32 @@ contracts:
             - gasPrice
             - from
 
+  # tokenId-level position lifecycle — powers per-position history, age, and
+  # earned-fee tracking in the frontend (pool events only see the Position
+  # Manager as the owner, so tokenIds are invisible without these).
+  - name: NonfungiblePositionManager
+    events:
+      - event: IncreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - from
+      - event: DecreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - from
+      - event: Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - from
+      - event: Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+        field_selection:
+          transaction_fields:
+            - hash
+            - from
+
 chains:
   - id: 1030 # Conflux eSpace
     start_block: 119639200
@@ -41,4 +67,6 @@ chains:
     contracts:
       - name: UniswapV3Factory
         address: 0x62Aa0294cB42Aae39b7772313eAdfa5d489146eC
+      - name: NonfungiblePositionManager
+        address: 0x820A73ba72A21f0AEF985dB6FB3E923b343b7Dbe
       - name: UniswapV3Pool
