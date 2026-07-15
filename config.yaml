@@ -1,6 +1,12 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: gswap_v3
 rollback_on_reorg: true
+# Make the tx hash + sender available to every handler (the earn audit-trail
+# entities record txHash; the DEX events keep their own per-event selections).
+field_selection:
+  transaction_fields:
+    - hash
+    - from
 contracts:
   - name: UniswapV3Factory
     events:
@@ -58,6 +64,50 @@ contracts:
             - hash
             - from
 
+  # ── Ginseng Earn v1.1 — ERC-4626 vault + single-sided strategy (canary) ──
+  # Full event coverage: deposit/withdraw/in-kind flows, harvested fees,
+  # rebalances, cross refreshes, all governance/param/status changes, and the
+  # gUSDT0 share-token ERC-20 transfers. Powers the /earn stats + an audit trail.
+  - name: GinsengEarnVault
+    events:
+      # ERC-4626 flows
+      - event: Deposit(address indexed sender, address indexed owner, uint256 assets, uint256 shares)
+      - event: Withdraw(address indexed sender, address indexed receiver, address indexed owner, uint256 assets, uint256 shares)
+      - event: RedeemedInKind(address indexed owner, address indexed receiver, uint256 shares, uint256 usdc, uint256 usdt0)
+      - event: Invested(uint256 assets)
+      # governance / config / status
+      - event: StrategySet(address strategy)
+      - event: DepositCapSet(uint256 cap)
+      - event: PerformanceFeeSet(uint16 bps)
+      - event: FeeQueued(uint16 bps, uint256 eta)
+      - event: FeeCancelled()
+      - event: TreasuryQueued(address treasury, uint256 eta)
+      - event: TreasurySet(address treasury)
+      - event: TreasuryCancelled()
+      - event: GuardianSet(address guardian)
+      - event: Paused(address account)
+      - event: Unpaused(address account)
+      - event: OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner)
+      - event: OwnershipTransferred(address indexed previousOwner, address indexed newOwner)
+      # gUSDT0 share token (ERC-20)
+      - event: Transfer(address indexed from, address indexed to, uint256 value)
+      - event: Approval(address indexed owner, address indexed spender, uint256 value)
+  - name: GinsengEarnStrategy
+    events:
+      - event: Rebalanced(int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 crossE18)
+      - event: Harvested(uint256 fees0, uint256 fees1, uint256 skim0, uint256 skim1)
+      - event: CrossRefreshed(uint256 crossE18, uint256 timestamp)
+      - event: Exited(uint128 liquidity, uint256 amount0, uint256 amount1)
+      - event: WithdrewToVault(uint256 requested, uint256 sent)
+      - event: WithdrewInKind(address receiver, uint256 amount0, uint256 amount1)
+      - event: SkimFailed(address indexed token, address indexed to, uint256 amount)
+      - event: GuardianSet(address guardian)
+      - event: KeeperSet(address indexed keeper)
+      - event: ETHSwept(address indexed to, uint256 amount)
+      - event: ParamsQueued(uint256 maxPythAge, uint256 maxDeviationBps, uint256 maxBandBps, uint256 maxConfBps, uint256 eta)
+      - event: ParamsExecuted(uint256 maxPythAge, uint256 maxDeviationBps, uint256 maxBandBps, uint256 maxConfBps)
+      - event: ParamsCancelled()
+
 chains:
   - id: 1030 # Conflux eSpace
     start_block: 119639200
@@ -69,4 +119,8 @@ chains:
         address: 0x62Aa0294cB42Aae39b7772313eAdfa5d489146eC
       - name: NonfungiblePositionManager
         address: 0x820A73ba72A21f0AEF985dB6FB3E923b343b7Dbe
+      - name: GinsengEarnVault
+        address: 0x11525A77768746917570a1ccD5c72651fD5fcba0
+      - name: GinsengEarnStrategy
+        address: 0x29c52a634Dc60EBe6D561810a51c7c201b239a07
       - name: UniswapV3Pool
