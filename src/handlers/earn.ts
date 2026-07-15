@@ -211,6 +211,7 @@ indexer.onEvent({ contract: "GinsengEarnVault", event: "OwnershipTransferred" },
 
 // ── Strategy: position lifecycle + stats ─────────────────────────────────────
 indexer.onEvent({ contract: "GinsengEarnStrategy", event: "Harvested" }, async ({ event, context }) => {
+  const sp = await snapshotSharePrice(event, context); // fees realized → NAV steps up
   context.EarnHarvest.set({
     id: evId(event),
     fees0: event.params.fees0,
@@ -227,11 +228,13 @@ indexer.onEvent({ contract: "GinsengEarnStrategy", event: "Harvested" }, async (
     cumulativeFees0: stat.cumulativeFees0 + event.params.fees0,
     cumulativeFees1: stat.cumulativeFees1 + event.params.fees1,
     harvestCount: stat.harvestCount + 1,
+    lastSharePriceE6: sp,
     updatedAt: BigInt(event.block.timestamp),
   });
 });
 
 indexer.onEvent({ contract: "GinsengEarnStrategy", event: "Rebalanced" }, async ({ event, context }) => {
+  const sp = await snapshotSharePrice(event, context);
   context.EarnRebalance.set({
     id: evId(event),
     tickLower: Number(event.params.tickLower),
@@ -249,11 +252,13 @@ indexer.onEvent({ contract: "GinsengEarnStrategy", event: "Rebalanced" }, async 
     lastTickUpper: Number(event.params.tickUpper),
     lastLiquidity: event.params.liquidity,
     lastCrossE18: event.params.crossE18,
+    lastSharePriceE6: sp,
     updatedAt: BigInt(event.block.timestamp),
   });
 });
 
 indexer.onEvent({ contract: "GinsengEarnStrategy", event: "CrossRefreshed" }, async ({ event, context }) => {
+  const sp = await snapshotSharePrice(event, context); // NAV re-valued at the new cross
   context.EarnCrossRefresh.set({
     id: evId(event),
     crossE18: event.params.crossE18,
@@ -266,6 +271,7 @@ indexer.onEvent({ contract: "GinsengEarnStrategy", event: "CrossRefreshed" }, as
     ...stat,
     lastCrossE18: event.params.crossE18,
     lastCrossTs: event.params.timestamp,
+    lastSharePriceE6: sp,
     updatedAt: BigInt(event.block.timestamp),
   });
 });
