@@ -3,6 +3,7 @@ import { getVaultSharePriceEffect } from "./utils/vaultSharePriceEffect";
 
 // Ginseng Earn v1.1 canary — vault 0x1152…, strategy 0x29c5…
 const VAULT = "0x11525A77768746917570a1ccD5c72651fD5fcba0";
+const STRATEGY = "0x29c52a634Dc60EBe6D561810a51c7c201b239a07";
 const STAT_ID = "v2";
 
 const evId = (event: any) => `${event.chainId}-${event.block.number}-${event.logIndex}`;
@@ -32,6 +33,7 @@ function emptyStat() {
 async function snapshotSharePrice(event: any, context: any): Promise<bigint> {
   const res = await context.effect(getVaultSharePriceEffect, {
     vault: VAULT,
+    strategy: STRATEGY,
     block: Number(event.block.number),
     chainId: event.chainId,
   });
