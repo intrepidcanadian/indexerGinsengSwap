@@ -2,5 +2,8 @@ node_modules/
 .envio/
 generated/
 .env
+# local Envio cloud env (e.g. .env.envio-cloud) — holds RPC URL
+.env.*
 *.log
 dist/
+*.tsbuildinfo
