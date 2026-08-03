@@ -6,4 +6,3 @@ import './handlers/burn';
 import './handlers/mint';
 import './handlers/swap';
 import './handlers/positionManager';
-import './handlers/earn';
