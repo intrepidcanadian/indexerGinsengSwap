@@ -1,6 +1,13 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: gswap_v3
-rollback_on_reorg: true
+# Reorg rollback is OFF, and that is deliberate — see the block_lag note below.
+# On 2026-08-02 this indexer wedged in an endless reorg-rollback loop that burned
+# a month of RPC quota while advancing zero blocks. block_lag keeps us out of the
+# zone where that can happen; this makes the loop structurally impossible rather
+# than merely unlikely. Safe only BECAUSE of block_lag: at 300 blocks (~6 min)
+# deep the blocks are settled, so there is nothing left to roll back. If block_lag
+# is ever reduced, turn this back on.
+rollback_on_reorg: false
 # No global field_selection. It existed to give the Earn audit-trail entities a
 # txHash on every event; with those gone, each DEX event declares exactly the
 # transaction fields its handler reads. That matters on an RPC data source —
@@ -86,15 +93,34 @@ chains:
     block_lag: 300
 
     # Conflux eSpace has no HyperSync endpoint (chain_metadata reports
-    # is_hyper_sync: false), so all sync traffic goes over RPC. Keep that off a
-    # metered endpoint: a bug like the one above should cost nothing but wasted
-    # requests, not a month of quota. Block-interval knobs are left at Envio's
-    # defaults — the scan width was never the problem.
+    # is_hyper_sync: false), so all sync traffic goes over RPC.
+    #
+    # The gateway is the sync source and the public node is only the fallback —
+    # NOT the other way round. That looks backwards for a metered endpoint, so:
+    #
+    #   evm.confluxrpc.com hard-caps at 5 concurrent requests ("request rate
+    #   exceeded: Too many requests (exceeds 5)", JSON-RPC -32005). Measured:
+    #   fire 8 parallel 10k-block eth_getLogs at it and exactly 5 return, 3 are
+    #   refused. Envio queries partitions in parallel (7+ here), so it trips the
+    #   cap constantly and drops into 1s/4s/8s exponential backoff — a historical
+    #   sync that takes 11 minutes on the gateway grinds for hours. The other
+    #   public endpoints are worse: unifra answered 1 of 8, blockpi 0 of 8.
+    #   The gateway served 8 of 8.
+    #
+    # Metered volume was never the real problem either: this indexer ran on the
+    # gateway from 2026-07-16 to ~08-01 without exhausting quota. What drained it
+    # was the reorg loop above, spinning thousands of times a second while
+    # advancing zero blocks — and that loop would have stalled the indexer no
+    # matter how much quota was left. Fix the loop and the steady-state cost is
+    # affordable again.
+    #
+    # Block-interval knobs stay at Envio's defaults; the scan width (10k) was
+    # never the problem.
     rpc:
-      - url: https://evm.confluxrpc.com
-        for: sync
-      # Metered — reached only if the public node itself stalls.
       - url: https://cfx-espace.gateway.tenderly.co/2TURbvW4WvM602DuxdqT4y
+        for: sync
+      # Free but 5-concurrent capped — usable only as a degraded fallback.
+      - url: https://evm.confluxrpc.com
         for: fallback
     contracts:
       - name: UniswapV3Factory
