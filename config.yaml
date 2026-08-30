@@ -72,7 +72,11 @@ contracts:
 
 chains:
   - id: 1030 # Conflux eSpace
-    start_block: 119639200
+    # Just below the first PoolCreated (block 121,756,425, verified on-chain
+    # 2026-08-25). The old value (119,639,200) made every fresh backfill scan
+    # ~2.1M blocks of empty pre-history — ~210 wasted getLogs windows per
+    # partition per redeploy, which matters on the 5-concurrent public node.
+    start_block: 121756400
     # Index ~6 minutes behind the tip. THIS IS WHAT KEEPS THE INDEXER ALIVE — do not
     # remove it without understanding the failure it prevents.
     #
