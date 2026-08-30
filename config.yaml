@@ -95,33 +95,56 @@ chains:
     # Conflux eSpace has no HyperSync endpoint (chain_metadata reports
     # is_hyper_sync: false), so all sync traffic goes over RPC.
     #
-    # The gateway is the sync source and the public node is only the fallback —
-    # NOT the other way round. That looks backwards for a metered endpoint, so:
+    # The FREE public node is the sync source and the metered gateway is only the
+    # fallback. This is the reverse of the 2026-08-02 arrangement, deliberately:
+    # steady-state sync at default settings issued ~300k requests/day (per ~1.16s
+    # block: one eth_blockNumber, one eth_getLogs per partition, one header — each
+    # its own HTTP POST; envio never batches JSON-RPC), which exhausted the
+    # gateway's monthly quota by itself in ~3 weeks. Killing the deployment.
     #
-    #   evm.confluxrpc.com hard-caps at 5 concurrent requests ("request rate
-    #   exceeded: Too many requests (exceeds 5)", JSON-RPC -32005). Measured:
-    #   fire 8 parallel 10k-block eth_getLogs at it and exactly 5 return, 3 are
-    #   refused. Envio queries partitions in parallel (7+ here), so it trips the
-    #   cap constantly and drops into 1s/4s/8s exponential backoff — a historical
-    #   sync that takes 11 minutes on the gateway grinds for hours. The other
-    #   public endpoints are worse: unifra answered 1 of 8, blockpi 0 of 8.
-    #   The gateway served 8 of 8.
+    # polling_interval 30000 is the load-bearing knob. The evm.schema.json note
+    # claims raising it cannot reduce usage ("every block is still fetched to
+    # check for reorgs") — that is WRONG for the 3.2.1 RPC path, verified in
+    # envio's sources: reorg hashes are harvested for free from range-endpoint
+    # headers plus log.blockHash (RpcSource.res ~1227), and one 30s cycle covers
+    # all ~26 elapsed blocks with a single getLogs per partition. Net effect is a
+    # ~30x cut (to ~12k requests/day), well inside the public node's limits. The
+    # extra 30s of indexing latency is nothing on top of block_lag's ~6 minutes,
+    # and every consumer caches for 5+ minutes anyway.
     #
-    # Metered volume was never the real problem either: this indexer ran on the
-    # gateway from 2026-07-16 to ~08-01 without exhausting quota. What drained it
-    # was the reorg loop above, spinning thousands of times a second while
-    # advancing zero blocks — and that loop would have stalled the indexer no
-    # matter how much quota was left. Fix the loop and the steady-state cost is
-    # affordable again.
+    # The public node's 5-concurrent cap ("exceeds 5", JSON-RPC -32005) is a
+    # HISTORICAL-SYNC problem, not a steady-state one: backfill fires parallel
+    # 10k-block getLogs across 7+ partitions and grinds for hours (measured
+    # 2026-08-02: gateway 8/8, confluxrpc 5/8, unifra 1/8, blockpi 0/8). At the
+    # tip there are ~2 partitions issuing small queries every 30s (measured
+    # 2026-08-24: 7 of 8 parallel small getLogs succeed). A fresh deployment
+    # re-syncs from start_block over this node — expect that one-time backfill
+    # to take hours, not the gateway's 11 minutes. If that ever becomes
+    # intolerable, flip the roles for the backfill only, then flip back.
     #
-    # Block-interval knobs stay at Envio's defaults; the scan width (10k) was
-    # never the problem.
+    # The ws endpoint replaces eth_blockNumber height-polling with newHeads
+    # pushes (verified working, ~1 push/s). It does NOT affect getLogs/header
+    # traffic — it is a complement to polling_interval, not a substitute.
+    #
+    # KNOWN TRADEOFF: the gateway URL below embeds its access key and this repo
+    # is public, so the key is effectively public too. This is deliberate:
+    # Envio Cloud builds straight from GitHub and its env-var feature is on a
+    # paid tier, so a committed literal is the only free way to ship a metered
+    # fallback. The exposure is bounded — the key can only spend the free
+    # gateway quota, and the fallback only carries traffic while the public
+    # sync node is stalled. The previous key (2TURb…, in git history) was
+    # rotated dead on 2026-08-25. If quota drains without a matching stall,
+    # assume the key is being farmed and rotate again.
     rpc:
-      - url: https://cfx-espace.gateway.tenderly.co/2TURbvW4WvM602DuxdqT4y
-        for: sync
-      # Free but 5-concurrent capped — usable only as a degraded fallback.
       - url: https://evm.confluxrpc.com
+        ws: wss://evm.confluxrpc.com/ws
+        for: sync
+        polling_interval: 30000
+      # Metered gateway (Tenderly) — fallback only. Envio auto-returns to the
+      # sync source within ~60s of it recovering, so this stays near-zero cost.
+      - url: https://cfx-espace.gateway.tenderly.co/3ltDBcr0rrr9ZZpUdGVJKs
         for: fallback
+        polling_interval: 30000
     contracts:
       - name: UniswapV3Factory
         address: 0x62Aa0294cB42Aae39b7772313eAdfa5d489146eC
