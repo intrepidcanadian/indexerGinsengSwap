@@ -99,54 +99,51 @@ chains:
     # Conflux eSpace has no HyperSync endpoint (chain_metadata reports
     # is_hyper_sync: false), so all sync traffic goes over RPC.
     #
-    # The FREE public node is the sync source and the metered gateway is only the
-    # fallback. This is the reverse of the 2026-08-02 arrangement, deliberately:
-    # steady-state sync at default settings issued ~300k requests/day (per ~1.16s
-    # block: one eth_blockNumber, one eth_getLogs per partition, one header — each
-    # its own HTTP POST; envio never batches JSON-RPC), which exhausted the
-    # gateway's monthly quota by itself in ~3 weeks. Killing the deployment.
+    # The metered gateway is the sync source AND polling_interval is 30000.
+    # Both halves matter — the 2026-08 quota disaster was the gateway at the
+    # DEFAULT 1s polling (one eth_blockNumber + one eth_getLogs per partition +
+    # one header per ~1.16s block, each its own HTTP POST; envio never batches
+    # JSON-RPC ≈ 300k requests/day ≈ 27M TU/month) plus the 08-02 reorg loop.
+    # At 30s polling the same gateway costs ~30k TU/day ≈ 0.9M TU/month of the
+    # 25M free plan — affordable permanently, with headroom for backfills.
     #
     # polling_interval 30000 is the load-bearing knob. The evm.schema.json note
     # claims raising it cannot reduce usage ("every block is still fetched to
     # check for reorgs") — that is WRONG for the 3.2.1 RPC path, verified in
     # envio's sources: reorg hashes are harvested for free from range-endpoint
     # headers plus log.blockHash (RpcSource.res ~1227), and one 30s cycle covers
-    # all ~26 elapsed blocks with a single getLogs per partition. Net effect is a
-    # ~30x cut (to ~12k requests/day), well inside the public node's limits. The
-    # extra 30s of indexing latency is nothing on top of block_lag's ~6 minutes,
-    # and every consumer caches for 5+ minutes anyway.
+    # all ~26 elapsed blocks with a single getLogs per partition. The extra 30s
+    # of indexing latency is nothing on top of block_lag's ~6 minutes, and every
+    # consumer caches for 5+ minutes anyway.
     #
-    # The public node's 5-concurrent cap ("exceeds 5", JSON-RPC -32005) is a
-    # HISTORICAL-SYNC problem, not a steady-state one: backfill fires parallel
-    # 10k-block getLogs across 7+ partitions and grinds for hours (measured
-    # 2026-08-02: gateway 8/8, confluxrpc 5/8, unifra 1/8, blockpi 0/8). At the
-    # tip there are ~2 partitions issuing small queries every 30s (measured
-    # 2026-08-24: 7 of 8 parallel small getLogs succeed). A fresh deployment
-    # re-syncs from start_block over this node — expect that one-time backfill
-    # to take hours, not the gateway's 11 minutes. If that ever becomes
-    # intolerable, flip the roles for the backfill only, then flip back.
+    # Why not sync on the free public node? Tried 2026-08-30 → 09-01: its
+    # 5-concurrent cap ("exceeds 5", JSON-RPC -32005) makes envio's backoff
+    # shrink the scan window 0.8x per refusal, and Development-plan deployments
+    # hibernate when idle — the historical backfill managed 8.4% in two days
+    # (weeks to finish), during which every indexer-backed frontend surface
+    # 502s. The gateway backfills the same range in ~minutes (measured 8/8
+    # parallel 10k-block getLogs vs confluxrpc 5/8, unifra 1/8, blockpi 0/8).
+    # Config changes mean a NEW deployment and a from-scratch resync, so
+    # "public for steady state, gateway for backfill" role-flipping costs a
+    # full resync each flip — not worth it at 0.9M TU/month steady state.
     #
-    # The ws endpoint replaces eth_blockNumber height-polling with newHeads
-    # pushes (verified working, ~1 push/s). It does NOT affect getLogs/header
-    # traffic — it is a complement to polling_interval, not a substitute.
-    #
-    # KNOWN TRADEOFF: the gateway URL below embeds its access key and this repo
-    # is public, so the key is effectively public too. This is deliberate:
-    # Envio Cloud builds straight from GitHub and its env-var feature is on a
-    # paid tier, so a committed literal is the only free way to ship a metered
-    # fallback. The exposure is bounded — the key can only spend the free
-    # gateway quota, and the fallback only carries traffic while the public
-    # sync node is stalled. The previous key (2TURb…, in git history) was
-    # rotated dead on 2026-08-25. If quota drains without a matching stall,
-    # assume the key is being farmed and rotate again.
+    # KNOWN TRADEOFF: the gateway URL embeds its access key and this repo is
+    # public, so the key is effectively public too. This is deliberate: Envio
+    # Cloud builds straight from GitHub and its env-var feature is on a paid
+    # tier, so a committed literal is the only free way to use the gateway.
+    # The exposure is bounded — the key can only spend the free gateway quota.
+    # The previous key (2TURb…, in git history) was rotated dead 2026-08-25.
+    # If quota drains far faster than ~1M TU/month with no matching stall or
+    # backfill, assume the key is being farmed and rotate again.
     rpc:
-      - url: https://evm.confluxrpc.com
-        ws: wss://evm.confluxrpc.com/ws
+      - url: https://cfx-espace.gateway.tenderly.co/3ltDBcr0rrr9ZZpUdGVJKs
         for: sync
         polling_interval: 30000
-      # Metered gateway (Tenderly) — fallback only. Envio auto-returns to the
-      # sync source within ~60s of it recovering, so this stays near-zero cost.
-      - url: https://cfx-espace.gateway.tenderly.co/3ltDBcr0rrr9ZZpUdGVJKs
+      # Free public node — fallback only (its ws newHeads stream engages if it
+      # ever becomes the active height source). Envio auto-returns to the sync
+      # source within ~60s of recovery, so this normally carries no traffic.
+      - url: https://evm.confluxrpc.com
+        ws: wss://evm.confluxrpc.com/ws
         for: fallback
         polling_interval: 30000
     contracts:
