@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+# Redeploy trigger 2026-10-01: Envio Cloud had no active deployment (October
+# usage showed 0/750 hours); this no-op commit nudges the GitHub-push webhook.
 name: gswap_v3
 # Reorg rollback is OFF, and that is deliberate — see the block_lag note below.
 # On 2026-08-02 this indexer wedged in an endless reorg-rollback loop that burned
